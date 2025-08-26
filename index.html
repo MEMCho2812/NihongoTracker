@@ -21,7 +21,7 @@
     .g-4{grid-template-columns:repeat(4,1fr)}
     @media (max-width:900px){.g-3,.g-4{grid-template-columns:1fr 1fr}.g-2{grid-template-columns:1fr}}
     @media (max-width:640px){.g-3,.g-4{grid-template-columns:1fr}}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25);transition:transform .15s ease, box-shadow .15s ease}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25);transition:transform .15s ease, box-shadow .15s ease;margin-bottom:12px}
     .card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.35)}
     .kpi{display:flex;flex-direction:column;gap:6px}
     .kpi .label{color:var(--sub);font-size:12px}
@@ -49,9 +49,9 @@
     .link{color:#8bd4ff;text-decoration:none}
     .link:hover{text-decoration:underline}
     .footer{margin:24px 0 8px;color:var(--sub);font-size:12px}
-  .chart{display:block;width:100%;background:#0e1621;border:1px solid var(--line);border-radius:12px}
-.chart-title{font-size:12px;color:var(--sub);margin:6px 0 0}
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .chart{display:block;width:100%;background:#0e1621;border:1px solid var(--line);border-radius:12px}
+    .chart-title{font-size:12px;color:var(--sub);margin:6px 0 0}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -72,18 +72,19 @@
     </div>
   </div>
 
-  <div class="card" id="auth-card" style="margin-top:8px">
+  <section class="card" id="auth-card" style="margin-bottom:24px">
     <h2>Вход и синхронизация</h2>
-    <div class="buttons" id="auth-box">
-      <input id="auth-email" type="email" placeholder="email" style="max-width:220px">
-      <input id="auth-pass" type="password" placeholder="пароль" style="max-width:160px">
-      <button class="btn small" id="btn-signup">Регистрация</button>
-      <button class="btn small" id="btn-login">Войти</button>
-      <button class="btn small danger" id="btn-logout" style="display:none">Выйти</button>
-      <div class="pill" id="auth-status">Гость</div>
+    <div class="buttons">
+    <input type="text" placeholder="email" id="auth-email" style="max-width:180px">
+    <input type="password" placeholder="пароль" id="auth-pass" style="max-width:180px">
+    <button class="btn small" id="btn-register">Регистрация</button>
+    <button class="btn small" id="btn-login">Войти</button>
+    <button class="btn small" id="btn-logout" style="display:none">Выйти</button>
+    <button class="btn small" id="btn-guest">Гость (без облака)</button>
+    <div class="pill" id="auth-user" style="display:none"></div>
     </div>
     <div class="note">Если не настроен Supabase — всё работает локально. После входа данные синхронизируются между устройствами.</div>
-  </div>
+  </section>
 
   <section class="grid g-4" id="dashboard"></section>
 
