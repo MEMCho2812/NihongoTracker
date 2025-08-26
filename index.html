@@ -6,9 +6,7 @@
   <title>JP Tracker — простой веб‑трекер прогресса японского</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%230b0f14'/%3E%3Cpath d='M16 96h96' stroke='%235cc8ff' stroke-width='8'/%3E%3Ctext x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-weight='700' font-size='52' fill='%23e6edf3'%3EJP%3C/text%3E%3C/svg%3E"/>
   <style>
-    :root{
-      --bg:#0b0f14; --panel:#111822; --muted:#1a2330; --text:#e6edf3; --sub:#9fb2c7; --brand:#5cc8ff; --ok:#53d17a; --warn:#ffd166; --bad:#ff6b6b; --line:#233042;
-    }
+    :root{ --bg:#0b0f14; --panel:#111822; --muted:#1a2330; --text:#e6edf3; --sub:#9fb2c7; --brand:#5cc8ff; --ok:#53d17a; --warn:#ffd166; --bad:#ff6b6b; --line:#233042; }
     *{box-sizing:border-box}
     body{margin:0;background:linear-gradient(180deg,#0b0f14 0%, #0d131b 100%);color:var(--text);font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif}
     .wrap{max-width:1100px;margin:0 auto;padding:24px}
@@ -23,7 +21,8 @@
     .g-4{grid-template-columns:repeat(4,1fr)}
     @media (max-width:900px){.g-3,.g-4{grid-template-columns:1fr 1fr}.g-2{grid-template-columns:1fr}}
     @media (max-width:640px){.g-3,.g-4{grid-template-columns:1fr}}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25);transition:transform .15s ease, box-shadow .15s ease}
+    .card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.35)}
     .kpi{display:flex;flex-direction:column;gap:6px}
     .kpi .label{color:var(--sub);font-size:12px}
     .kpi .value{font-size:22px;font-weight:700}
@@ -43,7 +42,7 @@
     th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
     tr:hover td{background:rgba(92,200,255,0.06)}
     .progress{height:10px;background:#0f1925;border-radius:999px;position:relative;border:1px solid var(--line)}
-    .progress > span{position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--p,0));background:linear-gradient(90deg,#5cc8ff,#53d17a);border-radius:999px}
+    .progress > span{position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--p,0));background:linear-gradient(90deg,#5cc8ff,#53d17a);border-radius:999px;transition:transform .6s cubic-bezier(.2,.6,.2,1)}
     .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(92,200,255,.12);border:1px solid rgba(92,200,255,.35);color:#cfeeff;padding:4px 8px;border-radius:999px;font-size:12px}
     .note{font-size:12px;color:var(--sub)}
     .right{justify-self:end}
@@ -80,7 +79,7 @@
       <input id="auth-pass" type="password" placeholder="пароль" style="max-width:160px">
       <button class="btn small" id="btn-signup">Регистрация</button>
       <button class="btn small" id="btn-login">Войти</button>
-      <button class="btn small" id="btn-logout" style="display:none">Выйти</button>
+      <button class="btn small danger" id="btn-logout" style="display:none">Выйти</button>
       <div class="pill" id="auth-status">Гость</div>
     </div>
     <div class="note">Если не настроен Supabase — всё работает локально. После входа данные синхронизируются между устройствами.</div>
@@ -537,8 +536,8 @@
   }
 
   // === Supabase: логин и синхронизация ===
-  const SUPABASE_URL = 'https://zagkdaytskkmcecvdlze.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZ2tkYXl0c2trbWNlY3ZkbHplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyMjY1MTMsImV4cCI6MjA3MTgwMjUxM30.3Uh26b35OEXAJ950Tk-qIbtyssSbcw4xGquNBFE40u0';
+  const SUPABASE_URL = ''; // TODO: вставь Project URL
+  const SUPABASE_ANON_KEY = ''; // TODO: вставь anon ключ
   let sb = null, currentUser = null;
 
   function supaInit(){
@@ -593,7 +592,18 @@
     const {error} = await sb.auth.signInWithPassword({ email, password });
     if (error) alert('Ошибка: '+error.message);
   }
-  async function authLogout(){ if(!sb) return; await sb.auth.signOut(); }
+  async function authLogout(){
+    if(!sb){ alert('Supabase не настроен'); return; }
+    try{
+      const { error } = await sb.auth.signOut();
+      if (error) throw error;
+      currentUser = null;
+      updateAuthUI();
+    } catch(e){
+      console.error('signOut error', e);
+      alert('Не удалось выйти: ' + (e?.message || e));
+    }
+  }
 
   async function syncFromDb(){
     try{
@@ -793,4 +803,3 @@
 </script>
 </body>
 </html>
-
