@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JP Tracker — простой веб‑трекер прогресса японского</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%230b0f14'/%3E%3Cpath d='M16 96h96' stroke='%235cc8ff' stroke-width='8'/%3E%3Ctext x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-weight='700' font-size='52' fill='%23e6edf3'%3EJP%3C/text%3E%3C/svg%3E"/>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#111822; --muted:#1a2330; --text:#e6edf3; --sub:#9fb2c7; --brand:#5cc8ff; --ok:#53d17a; --warn:#ffd166; --bad:#ff6b6b; --line:#233042;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b0f14 0%, #0d131b 100%);color:var(--text);font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:28px;margin:0 0 12px;letter-spacing:.2px}
+    h2{font-size:18px;margin:18px 0 8px;color:var(--brand)}
+    h3{font-size:15px;margin:14px 0 8px;color:var(--sub);text-transform:uppercase;letter-spacing:.08em}
+    .topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:6px 0 20px}
+    .muted{color:var(--sub)}
+    .grid{display:grid;gap:12px}
+    .g-2{grid-template-columns:1fr 1fr}
+    .g-3{grid-template-columns:repeat(3,1fr)}
+    .g-4{grid-template-columns:repeat(4,1fr)}
+    @media (max-width:900px){.g-3,.g-4{grid-template-columns:1fr 1fr}.g-2{grid-template-columns:1fr}}
+    @media (max-width:640px){.g-3,.g-4{grid-template-columns:1fr}}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .kpi{display:flex;flex-direction:column;gap:6px}
+    .kpi .label{color:var(--sub);font-size:12px}
+    .kpi .value{font-size:22px;font-weight:700}
+    .btn{appearance:none;border:1px solid var(--line);background:linear-gradient(180deg,#15202c,#0e1621);color:var(--text);padding:9px 12px;border-radius:12px;cursor:pointer}
+    .btn:hover{filter:brightness(1.1)}
+    .btn.brand{border-color:rgba(92,200,255,.5);background:linear-gradient(180deg,#1a3344,#11202c)}
+    .btn.danger{border-color:rgba(255,107,107,.4);background:linear-gradient(180deg,#3a1014,#24090b)}
+    .btn.small{padding:6px 10px;font-size:12px;border-radius:10px}
+    .buttons{display:flex;gap:8px;flex-wrap:wrap}
+    input, select, textarea{width:100%;background:#0e1621;border:1px solid var(--line);border-radius:10px;color:var(--text);padding:8px 10px}
+    input[type="number"]{text-align:right}
+    label{display:block;font-size:12px;color:var(--sub);margin:8px 0 6px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width:700px){.row{grid-template-columns:1fr}}
+    table{width:100%;border-collapse:collapse}
+    th, td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+    th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+    tr:hover td{background:rgba(92,200,255,0.06)}
+    .progress{height:10px;background:#0f1925;border-radius:999px;position:relative;border:1px solid var(--line)}
+    .progress > span{position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--p,0));background:linear-gradient(90deg,#5cc8ff,#53d17a);border-radius:999px}
+    .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(92,200,255,.12);border:1px solid rgba(92,200,255,.35);color:#cfeeff;padding:4px 8px;border-radius:999px;font-size:12px}
+    .note{font-size:12px;color:var(--sub)}
+    .right{justify-self:end}
+    .link{color:#8bd4ff;text-decoration:none}
+    .link:hover{text-decoration:underline}
+    .footer{margin:24px 0 8px;color:var(--sub);font-size:12px}
+  .chart{display:block;width:100%;background:#0e1621;border:1px solid var(--line);border-radius:12px}
+.chart-title{font-size:12px;color:var(--sub);margin:6px 0 0}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>Japanese Progress Tracker — Web</h1>
+      <div class="muted">Геймифицированный учёт прогресса для японского (локально в браузере, без серверов)</div>
+    </div>
+    <div class="buttons">
+      <button class="btn small" id="btn-export">Экспорт JSON</button>
+      <label for="file-import" class="btn small" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">Импорт JSON<input id="file-import" type="file" accept="application/json" style="display:none"></label>
+      <button class="btn small danger" id="btn-reset">Сбросить</button>
+      <button class="btn small" id="btn-autosave-toggle" title="Автоматически экспортировать JSON при сохранении">Автоэкспорт: выкл</button>
+      <button class="btn small" id="btn-autosave-pick" title="Выбрать файл для автосохранения (если поддерживается)">Файл…</button>
+      <div class="pill" id="autosave-ind">Автоэкспорт: выкл</div>
+    </div>
+  </div>
+
+  <div class="card" id="auth-card" style="margin-top:8px">
+    <h2>Вход и синхронизация</h2>
+    <div class="buttons" id="auth-box">
+      <input id="auth-email" type="email" placeholder="email" style="max-width:220px">
+      <input id="auth-pass" type="password" placeholder="пароль" style="max-width:160px">
+      <button class="btn small" id="btn-signup">Регистрация</button>
+      <button class="btn small" id="btn-login">Войти</button>
+      <button class="btn small" id="btn-logout" style="display:none">Выйти</button>
+      <div class="pill" id="auth-status">Гость</div>
+    </div>
+    <div class="note">Если не настроен Supabase — всё работает локально. После входа данные синхронизируются между устройствами.</div>
+  </div>
+
+  <section class="grid g-4" id="dashboard"></section>
+
+  <section class="card" id="charts" style="margin-top:12px">
+    <h2>Графики: XP и минуты</h2>
+    <div class="controls" style="margin-bottom:6px">
+      <label>Диапазон:
+        <select id="range-select">
+          <option value="7">7 дней</option>
+          <option value="30" selected>30 дней</option>
+          <option value="90">90 дней</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid g-2">
+      <div>
+        <canvas id="chart-xp" class="chart" height="260"></canvas>
+        <div class="chart-title">XP по дням</div>
+      </div>
+      <div>
+        <canvas id="chart-mins" class="chart" height="260"></canvas>
+        <div class="chart-title">Минуты по дням</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <h2>Ежедневная запись</h2>
+    <div class="row">
+      <div>
+        <label>Дата</label>
+        <input type="date" id="f-date" />
+      </div>
+      <div>
+        <label>Минуты учебы (всего)</label>
+        <input type="number" id="f-mins" min="0" step="1" placeholder="например, 45" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Anki — ревью (шт)</label>
+        <input type="number" id="f-anki-rev" min="0" step="1" />
+      </div>
+      <div>
+        <label>Anki — новые (шт)</label>
+        <input type="number" id="f-anki-new" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Listening (мин)</label>
+        <input type="number" id="f-listen" min="0" step="1" />
+      </div>
+      <div>
+        <label>Shadowing (мин)</label>
+        <input type="number" id="f-shadow" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Speaking / Output (мин)</label>
+        <input type="number" id="f-speak" min="0" step="1" />
+      </div>
+      <div>
+        <label>Grammar reps (шт)</label>
+        <input type="number" id="f-gram" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Манга — страницы</label>
+        <input type="number" id="f-manga" min="0" step="1" />
+      </div>
+      <div>
+        <label>Стрим — минуты</label>
+        <input type="number" id="f-stream" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Новые слова (шт)</label>
+        <input type="number" id="f-words" min="0" step="1" />
+      </div>
+      <div>
+        <label>Клипы расшифр. (шт, по 1 мин)</label>
+        <input type="number" id="f-clips" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Разговоры 30 мин (шт)</label>
+        <input type="number" id="f-convo" min="0" step="1" />
+      </div>
+      <div>
+        <label>Босс-файты (шт)</label>
+        <input type="number" id="f-boss" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>2k — выучено всего</label>
+        <input type="number" id="f-2k" min="0" step="1" />
+      </div>
+      <div>
+        <label>6k — выучено всего</label>
+        <input type="number" id="f-6k" min="0" step="1" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Кастом-1 (шт)</label>
+        <input type="number" id="f-custom1" min="0" step="1" />
+      </div>
+      <div>
+        <label>Кастом-2 (шт)</label>
+        <input type="number" id="f-custom2" min="0" step="1" />
+      </div>
+    </div>
+
+    <label>Настроение / заметки</label>
+    <textarea id="f-notes" rows="2" placeholder="например, great focus / busy day"></textarea>
+
+    <div class="buttons" style="margin-top:10px">
+      <button class="btn brand" id="btn-save-day">Сохранить день</button>
+      <button class="btn" id="btn-clear-form">Очистить форму</button>
+      <div class="pill" id="xp-preview">XP за день: 0</div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <h2>Журнал дней</h2>
+    <div class="note">Клик по строке — загрузить день в форму. Удаление — корзина справа.</div>
+    <div style="overflow:auto; max-height:380px; margin-top:8px">
+      <table id="tbl-days"></table>
+    </div>
+  </section>
+
+  <section class="grid g-2" style="margin-top:12px">
+    <div class="card">
+      <h2>Настройки XP</h2>
+      <div class="note">Можно менять значения XP и названия кастомных задач. Сами расчёты привязаны к полям формы (см. подсказки ниже).</div>
+      <table id="tbl-xp" style="margin-top:8px"></table>
+      <div class="note" style="margin-top:8px">Формулы: ревью/новые/минуты/страницы переводятся в «порции»: 10 ревью, 10 новых, 20 мин слушания, 10 мин шадоуинга, 15 мин говорения, 1 грамм‑реп, 5 стр. манги, 1 клип (1 мин), 1 разговор (30 мин), 1 босс-файт, кастом‑1 (шт), кастом‑2 (шт).</div>
+    </div>
+
+    <div class="card">
+      <h2>Уровни и цели</h2>
+      <table id="tbl-levels" style="margin-top:8px"></table>
+      <h3>Майлстоны</h3>
+      <table id="tbl-milestones"></table>
+      <div class="buttons" style="margin-top:8px">
+        <button class="btn small" id="btn-add-milestone">Добавить майлстон</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">Сохранение идёт в <b>localStorage</b> (данные остаются в этом браузере). После входа — ещё и в облако (Supabase). Делай экспорт JSON как бэкап.</div>
+</div>
+
+<script>
+(function(){
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const LS_KEY = 'jp_tracker_state_v1';
+
+  const defaults = {
+    entries: {}, // keyed by ISO date
+    xp: {
+      anki10rev: {name:'Anki 10 ревью', xp:10},
+      anki10new: {name:'Anki 10 новых', xp:20},
+      listen20:  {name:'Listening 20 мин', xp:20},
+      shadow10:  {name:'Shadowing 10 мин', xp:15},
+      speak15:   {name:'Speaking 15 мин', xp:25},
+      gram1:     {name:'Grammar SRS 1', xp:20},
+      manga5:    {name:'Манга 5 страниц', xp:25},
+      clip1:     {name:'Клип+транскр. 1 мин', xp:20},
+      convo30:   {name:'Разговор 30 мин', xp:50},
+      boss:      {name:'Босс-файт', xp:200},
+      custom1:   {name:'Кастом‑1', xp:30},
+      custom2:   {name:'Кастом‑2', xp:15},
+    },
+    levels: [
+      {level:1, need:0}, {level:2, need:300}, {level:3, need:700}, {level:4, need:1200},
+      {level:5, need:1800}, {level:6, need:2500}, {level:7, need:3300}, {level:8, need:4200},
+      {level:9, need:5200}, {level:10, need:6300}
+    ],
+    milestones: [
+      {when:'Конец 1 месяца', goal:'Питч-акцент + 400 слов (2k) + 5 стр. манги', done:false},
+      {when:'Конец 3 месяца', goal:'N4‑ядро + 1000 слов (2k) + 10 мин JP‑стрим', done:false},
+      {when:'Конец 6 месяца', goal:'N4 мок пройден; 2000 слов (2k); 1 том манги', done:false},
+      {when:'Конец 9 месяца', goal:'N3 50%; 3500 слов; 30‑мин JP‑стрим', done:false},
+      {when:'Конец 12 месяца', goal:'N3 около; 5000 слов; 2 тома манги', done:false},
+    ]
+  };
+
+  let state = load() || defaults;
+
+  function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  function load(){ try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch(e){ return null; } }
+
+  function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+  function toISO(val){ const d = new Date(val); if(isNaN(+d)) return todayISO(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+  function human(dateISO){ const d=new Date(dateISO); return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'}); }
+
+  function computeXP(entry){
+    const X = state.xp;
+    const parts = [
+      Math.floor((+entry.ankiRev||0)/10) * X.anki10rev.xp,
+      Math.floor((+entry.ankiNew||0)/10) * X.anki10new.xp,
+      Math.floor((+entry.listen||0)/20) * X.listen20.xp,
+      Math.floor((+entry.shadow||0)/10) * X.shadow10.xp,
+      Math.floor((+entry.speak||0)/15) * X.speak15.xp,
+      Math.floor((+entry.gram||0)/1)  * X.gram1.xp,
+      Math.floor((+entry.manga||0)/5) * X.manga5.xp,
+      Math.floor((+entry.clips||0)/1)* X.clip1.xp,
+      Math.floor((+entry.convo||0)/1)* X.convo30.xp,
+      Math.floor((+entry.boss||0)/1) * X.boss.xp,
+      Math.floor((+entry.custom1||0)/1) * X.custom1.xp,
+      Math.floor((+entry.custom2||0)/1) * X.custom2.xp,
+    ];
+    return parts.reduce((a,b)=>a+b,0);
+  }
+
+  function levelFromXP(total){
+    const arr = state.levels.slice().sort((a,b)=>a.need-b.need);
+    let lvl = arr[0];
+    for(const it of arr){ if(total >= it.need) lvl = it; }
+    const next = arr.find(it=>it.need>lvl.need) || null;
+    const into = total - lvl.need;
+    const toNext = next ? (next.need - total) : 0;
+    const pct = next ? Math.max(0, Math.min(1, into / (next.need - lvl.need))) : 1;
+    return {level:lvl.level, next: next?.level || lvl.level, pct, into, toNext, currNeed:lvl.need, nextNeed: next?.need || lvl.need};
+  }
+
+  function entriesSorted(){ return Object.entries(state.entries).sort((a,b)=>a[0]<b[0]?1:-1).map(([k,v])=>({date:k, ...v})); }
+
+  function stats(){
+    const arr = entriesSorted();
+    const last7 = arr.filter((_,i)=> i < 7);
+    const totalXP = arr.reduce((s,e)=> s + (e.xp||0), 0);
+    const totalXP7 = last7.reduce((s,e)=> s + (e.xp||0), 0);
+    const avgMins7 = last7.length ? (last7.reduce((s,e)=> s + (+e.mins||0), 0) / last7.length) : 0;
+    const latest2k = arr.length ? (arr[0].k2 || 0) : 0;
+    const latest6k = arr.length ? (arr[0].k6 || 0) : 0;
+    const st = streak();
+    const lvl = levelFromXP(totalXP);
+    return {totalXP, totalXP7, avgMins7, latest2k, latest6k, streakDays: st, level: lvl};
+  }
+
+  function streak(){
+    // consecutive days with mins>0 starting from today backwards
+    let count = 0; const today = new Date(); today.setHours(0,0,0,0);
+    for(let i=0;i<3650;i++){
+      const d = new Date(today); d.setDate(today.getDate()-i);
+      const iso = d.toISOString().slice(0,10);
+      const e = state.entries[iso];
+      if(!e || !(+e.mins>0)) break; else count++;
+    }
+    return count;
+  }
+
+  function setDateDefault(){ $('#f-date').value = todayISO(); }
+
+  function readForm(){
+    const date = toISO($('#f-date').value || todayISO());
+    const entry = {
+      mins: +($('#f-mins').value||0),
+      ankiRev: +($('#f-anki-rev').value||0),
+      ankiNew: +($('#f-anki-new').value||0),
+      listen: +($('#f-listen').value||0),
+      shadow: +($('#f-shadow').value||0),
+      speak: +($('#f-speak').value||0),
+      gram: +($('#f-gram').value||0),
+      manga: +($('#f-manga').value||0),
+      stream: +($('#f-stream').value||0),
+      words: +($('#f-words').value||0),
+      clips: +($('#f-clips').value||0),
+      convo: +($('#f-convo').value||0),
+      boss: +($('#f-boss').value||0),
+      k2: +($('#f-2k').value||0),
+      k6: +($('#f-6k').value||0),
+      custom1: +($('#f-custom1').value||0),
+      custom2: +($('#f-custom2').value||0),
+      notes: $('#f-notes').value||''
+    };
+    entry.xp = computeXP(entry);
+    return {date, entry};
+  }
+
+  function fillForm(dateISO){
+    const e = state.entries[dateISO]; if(!e) return;
+    $('#f-date').value = dateISO;
+    $('#f-mins').value = e.mins||0;
+    $('#f-anki-rev').value = e.ankiRev||0;
+    $('#f-anki-new').value = e.ankiNew||0;
+    $('#f-listen').value = e.listen||0;
+    $('#f-shadow').value = e.shadow||0;
+    $('#f-speak').value = e.speak||0;
+    $('#f-gram').value = e.gram||0;
+    $('#f-manga').value = e.manga||0;
+    $('#f-stream').value = e.stream||0;
+    $('#f-words').value = e.words||0;
+    $('#f-clips').value = e.clips||0;
+    $('#f-convo').value = e.convo||0;
+    $('#f-boss').value = e.boss||0;
+    $('#f-2k').value = e.k2||0;
+    $('#f-6k').value = e.k6||0;
+    $('#f-custom1').value = e.custom1||0;
+    $('#f-custom2').value = e.custom2||0;
+    $('#f-notes').value = e.notes||'';
+    updateXpPreview();
+  }
+
+  function clearForm(){ $$('#f-mins, #f-anki-rev, #f-anki-new, #f-listen, #f-shadow, #f-speak, #f-gram, #f-manga, #f-stream, #f-words, #f-clips, #f-convo, #f-boss, #f-2k, #f-6k, #f-custom1, #f-custom2').forEach(i=>i.value=''); $('#f-notes').value=''; setDateDefault(); updateXpPreview(); }
+
+  function renderDashboard(){
+    const d = stats();
+    const lvl = d.level;
+    $('#dashboard').innerHTML = `
+      <div class="card kpi"><div class="label">Уровень</div>
+        <div class="value">${lvl.level} <span class="muted">→ next ${lvl.next}</span></div>
+        <div class="progress" style="--p:${lvl.pct}"><span></span></div>
+        <div class="note">До след. уровня: ${lvl.toNext} XP</div>
+      </div>
+      <div class="card kpi"><div class="label">XP за 7 дней</div>
+        <div class="value">${d.totalXP7}</div>
+        <div class="note">Всего XP: ${d.totalXP}</div>
+      </div>
+      <div class="card kpi"><div class="label">Сред. мин/день (7д)</div>
+        <div class="value">${d.avgMins7.toFixed(1)}</div>
+        <div class="note">Стрик: ${d.streakDays} дней</div>
+      </div>
+      <div class="card kpi"><div class="label">Deck 2k / 6k</div>
+        <div class="value">${d.latest2k} / ${d.latest6k}</div>
+        <div class="progress" style="--p:${Math.min(1, (d.latest2k||0)/2000)}"><span></span></div>
+        <div class="note">Прогресс к 2k: ${(Math.min(100, ((d.latest2k||0)/2000)*100)).toFixed(0)}%</div>
+      </div>`;
+  }
+
+  function renderDays(){
+    const arr = entriesSorted();
+    const head = `<tr><th>Дата</th><th class="right">XP</th><th class="right">Мин</th><th class="right">2k</th><th class="right">6k</th><th>Заметки</th><th></th></tr>`;
+    const rows = arr.map(e=>{
+      return `<tr data-date="${e.date}"><td>${human(e.date)}</td><td class="right">${e.xp||0}</td><td class="right">${e.mins||0}</td><td class="right">${e.k2||0}</td><td class="right">${e.k6||0}</td><td>${(e.notes||'').replace(/</g,'&lt;')}</td><td class="right"><button class="btn small danger act-del" data-date="${e.date}">🗑</button></td></tr>`
+    }).join('');
+    $('#tbl-days').innerHTML = head + rows;
+
+    // row click loads form
+    $$('#tbl-days tr[data-date]').forEach(tr=>{
+      tr.addEventListener('click', (ev)=>{
+        if(ev.target && ev.target.classList.contains('act-del')) return; // handled elsewhere
+        const iso = tr.getAttribute('data-date');
+        fillForm(iso);
+        window.scrollTo({top:0, behavior:'smooth'});
+      });
+    });
+
+    $$('#tbl-days .act-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const iso = btn.getAttribute('data-date');
+        if(confirm('Удалить запись за ' + human(iso) + '?')){
+          delete state.entries[iso]; save(); renderAll(); setDateDefault(); clearForm();
+        }
+      });
+    });
+  }
+
+  function renderXP(){
+    const x = state.xp;
+    const head = `<tr><th>Задача</th><th class="right">XP</th></tr>`;
+    const ids = ['anki10rev','anki10new','listen20','shadow10','speak15','gram1','manga5','clip1','convo30','boss','custom1','custom2'];
+    const rows = ids.map(id=>{
+      return `<tr><td><input data-xid="${id}" data-field="name" value="${x[id].name}"></td><td class="right"><input type="number" min="0" step="1" data-xid="${id}" data-field="xp" value="${x[id].xp}" style="max-width:120px"></td></tr>`
+    }).join('');
+    $('#tbl-xp').innerHTML = head + rows;
+
+    $$('#tbl-xp input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const id = inp.getAttribute('data-xid');
+        const field = inp.getAttribute('data-field');
+        if(field==='xp') state.xp[id].xp = +inp.value||0; else state.xp[id].name = inp.value||'';
+        save(); updateXpPreview(); renderDashboard();
+      });
+    });
+  }
+
+  function renderLevels(){
+    const head = `<tr><th>Уровень</th><th class="right">Нужно XP (накоп.)</th><th></th></tr>`;
+    const rows = state.levels
+      .sort((a,b)=>a.need-b.need)
+      .map((lv,i)=>`<tr>
+        <td><input data-lid="${i}" data-field="level" type="number" value="${lv.level}" style="max-width:80px"></td>
+        <td class="right"><input data-lid="${i}" data-field="need" type="number" min="0" step="50" value="${lv.need}" style="max-width:140px"></td>
+        <td class="right"><button class="btn small danger" data-del-level="${i}">Удалить</button></td>
+      </tr>`).join('');
+    $('#tbl-levels').innerHTML = head + rows + `<tr><td colspan="3" class="right"><button class="btn small" id="btn-add-level">Добавить уровень</button></td></tr>`;
+
+    $('#btn-add-level').onclick = ()=>{ state.levels.push({level:(state.levels.length?state.levels[state.levels.length-1].level+1:1), need:(state.levels.length?state.levels[state.levels.length-1].need+800:0)}); save(); renderLevels(); renderDashboard(); };
+    $$('#tbl-levels [data-del-level]').forEach(b=> b.onclick = ()=>{ const i=+b.getAttribute('data-del-level'); state.levels.splice(i,1); save(); renderLevels(); renderDashboard(); });
+    $$('#tbl-levels input').forEach(inp=> inp.onchange = ()=>{ const i=+inp.getAttribute('data-lid'); const f=inp.getAttribute('data-field'); state.levels[i][f] = +inp.value||0; save(); renderLevels(); renderDashboard(); });
+  }
+
+  function renderMilestones(){
+    const head = `<tr><th>Когда</th><th>Цель</th><th>Готово</th><th></th></tr>`;
+    const rows = state.milestones.map((m,i)=>`<tr>
+      <td><input data-mid="${i}" data-field="when" value="${m.when}"></td>
+      <td><input data-mid="${i}" data-field="goal" value="${m.goal}"></td>
+      <td><input type="checkbox" data-mid="${i}" data-field="done" ${m.done?'checked':''}></td>
+      <td class="right"><button class="btn small danger" data-del-m="${i}">Удалить</button></td>
+    </tr>`).join('');
+    $('#tbl-milestones').innerHTML = head + rows;
+
+    $$('#tbl-milestones input').forEach(inp=>{
+      inp.onchange = ()=>{ const i=+inp.getAttribute('data-mid'); const f=inp.getAttribute('data-field'); state.milestones[i][f] = (f==='done') ? inp.checked : inp.value; save(); };
+    });
+    $$('#tbl-milestones [data-del-m]').forEach(btn=> btn.onclick = ()=>{ const i=+btn.getAttribute('data-del-m'); state.milestones.splice(i,1); save(); renderMilestones(); });
+    $('#btn-add-milestone').onclick = ()=>{ state.milestones.push({when:'Когда', goal:'Новая цель', done:false}); save(); renderMilestones(); };
+  }
+
+  function updateXpPreview(){
+    const {entry} = readForm();
+    $('#xp-preview').textContent = 'XP за день: ' + entry.xp;
+  }
+
+  function renderAll(){ renderDashboard(); renderCharts(); renderDays(); renderXP(); renderLevels(); renderMilestones(); updateXpPreview(); }
+
+  function exportJSON(){
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'jp_tracker_export.json'; a.click();
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+  }
+
+  function importJSON(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{ const data = JSON.parse(reader.result); if(data && data.entries){ state = Object.assign({}, defaults, data); save(); renderAll(); alert('Импортировано успешно'); } else { alert('Неверный формат файла'); } }
+      catch(e){ alert('Ошибка импорта: ' + e.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  // === Supabase: логин и синхронизация ===
+  const SUPABASE_URL = 'https://zagkdaytskkmcecvdlze.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZ2tkYXl0c2trbWNlY3ZkbHplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyMjY1MTMsImV4cCI6MjA3MTgwMjUxM30.3Uh26b35OEXAJ950Tk-qIbtyssSbcw4xGquNBFE40u0';
+  let sb = null, currentUser = null;
+
+  function supaInit(){
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
+      console.warn('Supabase не сконфигурирован — работает только локально.');
+      return;
+    }
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange(async (_event, session) => {
+      currentUser = session?.user || null;
+      updateAuthUI();
+      if (currentUser) { await syncFromDb(); }
+    });
+  }
+
+  function updateAuthUI(){
+    const st = document.getElementById('auth-status');
+    const e = document.getElementById('auth-email');
+    const p = document.getElementById('auth-pass');
+    const btnSI = document.getElementById('btn-signup');
+    const btnLI = document.getElementById('btn-login');
+    const btnLO = document.getElementById('btn-logout');
+    if (!window.supabase || !sb){ if(st) st.textContent='Гость (без облака)'; return; }
+    if (currentUser){
+      if(st) st.textContent = currentUser.email || 'Вошёл';
+      if(btnLO) btnLO.style.display='inline-flex';
+      if(btnSI) btnSI.style.display='none';
+      if(btnLI) btnLI.style.display='none';
+      if(e) e.style.display='none';
+      if(p) p.style.display='none';
+    } else {
+      if(st) st.textContent='Гость';
+      if(btnLO) btnLO.style.display='none';
+      if(btnSI) btnSI.style.display='inline-flex';
+      if(btnLI) btnLI.style.display='inline-flex';
+      if(e) e.style.display='inline-block';
+      if(p) p.style.display='inline-block';
+    }
+  }
+
+  async function authSignup(){
+    if(!sb) return alert('Supabase не настроен');
+    const email=(document.getElementById('auth-email')?.value||'').trim();
+    const password=(document.getElementById('auth-pass')?.value||'').trim();
+    const {error} = await sb.auth.signUp({ email, password });
+    alert(error ? ('Ошибка: '+error.message) : 'Проверь почту для подтверждения (если включено)');
+  }
+  async function authLogin(){
+    if(!sb) return alert('Supabase не настроен');
+    const email=(document.getElementById('auth-email')?.value||'').trim();
+    const password=(document.getElementById('auth-pass')?.value||'').trim();
+    const {error} = await sb.auth.signInWithPassword({ email, password });
+    if (error) alert('Ошибка: '+error.message);
+  }
+  async function authLogout(){ if(!sb) return; await sb.auth.signOut(); }
+
+  async function syncFromDb(){
+    try{
+      const {data, error} = await sb.from('states').select('data, updated_at').eq('user_id', currentUser.id).single();
+      if (error && error.code !== 'PGRST116') throw error; // 116 = row not found
+      if (data && data.data){
+        state = Object.assign({}, defaults, data.data);
+        save(); renderAll();
+      } else {
+        await sb.from('states').upsert({ user_id: currentUser.id, data: state });
+      }
+    } catch(e){ console.error('syncFromDb error', e); }
+  }
+
+  async function syncToDb(){
+    if (!sb || !currentUser) return;
+    try{ await sb.from('states').upsert({ user_id: currentUser.id, data: state }); }
+    catch(e){ console.error('syncToDb error', e); }
+  }
+
+  // --- Autosave (file or download fallback) ---
+  // helper: download a text file
+  function downloadText(filename, text){
+    const blob = new Blob([text], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+  }
+  let settings = null; // { autosaveEnabled: boolean, autosaveMode: 'handle'|'download', filename: string }
+  let fileHandle = null;
+  const SETTINGS_KEY = 'jp_tracker_settings_v1';
+
+  function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }catch(e){} }
+  function loadSettings(){
+    try{ return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {autosaveEnabled:false, autosaveMode: (('showSaveFilePicker' in window)?'handle':'download'), filename:''}; }
+    catch(e){ return {autosaveEnabled:false, autosaveMode: 'download', filename:''}; }
+  }
+  function updateAutosaveUI(){
+    const ind = document.getElementById('autosave-ind');
+    const modeText = !settings?.autosaveEnabled ? 'выкл' : (settings.autosaveMode==='handle' && settings.filename ? ('в файл: '+settings.filename) : 'в Загрузки');
+    if(ind) ind.textContent = 'Автоэкспорт: ' + modeText;
+    const btnPick = document.getElementById('btn-autosave-pick');
+    if(btnPick) btnPick.style.display = (settings?.autosaveEnabled && ('showSaveFilePicker' in window)) ? 'inline-flex' : 'none';
+    const btnToggle = document.getElementById('btn-autosave-toggle');
+    if(btnToggle) btnToggle.textContent = 'Автоэкспорт: ' + (settings?.autosaveEnabled ? 'вкл' : 'выкл');
+  }
+  async function chooseAutosaveFile(){
+    if(!('showSaveFilePicker' in window)){
+      alert('Браузер не даёт прямую запись в файл. Будет автоэкспорт в Загрузки.');
+      settings.autosaveEnabled = true; settings.autosaveMode='download'; settings.filename=''; saveSettings(); updateAutosaveUI(); return;
+    }
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName:'jp_tracker.json',
+        types:[{description:'JSON', accept:{'application/json':['.json']}}]
+      });
+      const perm = await handle.requestPermission({writable:true});
+      if(perm !== 'granted'){ alert('Разрешение на запись не выдано. Использую автоэкспорт в Загрузки.'); settings.autosaveMode='download'; settings.filename=''; saveSettings(); updateAutosaveUI(); return; }
+      fileHandle = handle; settings.autosaveEnabled = true; settings.autosaveMode='handle'; settings.filename = handle.name; saveSettings(); updateAutosaveUI();
+    }catch(e){ /* отмена выбора */ }
+  }
+  function fallbackDownload(data){
+    const ts = new Date().toISOString().replace(/[:]/g,'-').replace('T','_').slice(0,16);
+    downloadText('jp_tracker_autosave_'+ts+'.json', data);
+  }
+  async function autoSaveNow(){
+    if(!settings || !settings.autosaveEnabled) return;
+    const data = JSON.stringify(state, null, 2);
+    if(settings.autosaveMode==='handle' && fileHandle){
+      try{ const w = await fileHandle.createWritable(); await w.write(new Blob([data], {type:'application/json'})); await w.close(); }
+      catch(e){ console.warn('Запись не удалась, делаю скачивание:', e); fallbackDownload(data); }
+    } else if(settings.autosaveMode==='handle' && ('showSaveFilePicker' in window)){
+      await chooseAutosaveFile(); if(fileHandle) return autoSaveNow(); else fallbackDownload(data);
+    } else {
+      fallbackDownload(data);
+    }
+  }
+
+  // --- Charts ---
+  function series(rangeDays){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const labels = []; const xp=[]; const mins=[];
+    for(let i=rangeDays-1;i>=0;i--){
+      const d = new Date(today); d.setDate(today.getDate()-i);
+      const iso = d.toISOString().slice(0,10);
+      const e = state.entries[iso] || {};
+      labels.push(iso);
+      xp.push(e.xp||0);
+      mins.push(e.mins||0);
+    }
+    return {labels, xp, mins};
+  }
+
+  function drawChart(canvas, labels, values){
+    if(!canvas) return; const ctx = canvas.getContext('2d');
+    const W = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+    const H = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    const pad = {l:36, r:10, t:10, b:22};
+    const w = canvas.clientWidth - pad.l - pad.r;
+    const h = canvas.clientHeight - pad.t - pad.b;
+    ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+
+    // background
+    ctx.fillStyle = '#0e1621'; ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight);
+
+    // grid
+    const maxV = Math.max(10, Math.max(...values));
+    const step = Math.max(1, Math.ceil(maxV / 4));
+    ctx.strokeStyle = '#233042'; ctx.lineWidth = 1;
+    for(let i=0;i<=4;i++){
+      const y = pad.t + h - (i/4)*h; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+w, y); ctx.stroke();
+      const val = Math.round(i*step);
+      ctx.fillStyle = '#9fb2c7'; ctx.font = '12px system-ui'; ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText((i===4?maxV:val).toString(), pad.l-6, y);
+    }
+
+    // line
+    ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    values.forEach((v,i)=>{
+      const x = pad.l + (i/(labels.length-1))*w;
+      const y = pad.t + h - (v/maxV)*h;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // x labels (sparse)
+    ctx.fillStyle = '#9fb2c7'; ctx.font = '11px system-ui'; ctx.textAlign='center'; ctx.textBaseline='top';
+    const n = labels.length; const stepX = Math.ceil(n/6);
+    for(let i=0;i<n;i+=stepX){
+      const d = new Date(labels[i]);
+      const lab = d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+      const x = pad.l + (i/(n-1))*w; const y = pad.t + h + 4;
+      ctx.fillText(lab, x, y);
+    }
+  }
+
+  function renderCharts(){
+    const range = +($('#range-select')?.value || 30);
+    const {labels, xp, mins} = series(range);
+    drawChart($('#chart-xp'), labels, xp);
+    drawChart($('#chart-mins'), labels, mins);
+  }
+
+  // Event wiring
+  // charts
+  $('#range-select') && ($('#range-select').onchange = renderCharts);
+
+  // import/export/reset
+  document.getElementById('btn-export') && (document.getElementById('btn-export').onclick = exportJSON);
+  document.getElementById('file-import') && (document.getElementById('file-import').onchange = (e)=>{ if(e.target.files && e.target.files[0]) importJSON(e.target.files[0]); e.target.value=''; });
+  document.getElementById('btn-reset') && (document.getElementById('btn-reset').onclick = ()=>{ if(confirm('Сбросить все данные трекера? Это необратимо.')){ state = JSON.parse(JSON.stringify(defaults)); save(); renderAll(); clearForm(); } });
+
+  // daily save / clear
+  document.getElementById('btn-save-day') && (document.getElementById('btn-save-day').onclick = async ()=>{
+    const {date, entry} = readForm();
+    state.entries[date] = entry; save(); renderAll();
+    await syncToDb();
+    await autoSaveNow();
+    alert('Сохранено: ' + human(date) + (currentUser ? ' (и синхронизировано)' : ''));
+  });
+  document.getElementById('btn-clear-form') && (document.getElementById('btn-clear-form').onclick = clearForm);
+
+  // autosave controls
+  document.getElementById('btn-autosave-toggle') && (document.getElementById('btn-autosave-toggle').onclick = async ()=>{ settings.autosaveEnabled = !settings.autosaveEnabled; saveSettings(); updateAutosaveUI(); if(settings.autosaveEnabled && settings.autosaveMode==='handle'){ await chooseAutosaveFile(); } });
+  document.getElementById('btn-autosave-pick') && (document.getElementById('btn-autosave-pick').onclick = chooseAutosaveFile);
+
+  // auth buttons
+  document.getElementById('btn-signup') && (document.getElementById('btn-signup').onclick = authSignup);
+  document.getElementById('btn-login') && (document.getElementById('btn-login').onclick = authLogin);
+  document.getElementById('btn-logout') && (document.getElementById('btn-logout').onclick = authLogout);
+
+  // PWA extras (оставим как есть, они не мешают в file://)
+  $('#btn-dl-manifest') && ($('#btn-dl-manifest').onclick = ()=> downloadText('manifest.webmanifest', genManifest()));
+  $('#btn-dl-sw') && ($('#btn-dl-sw').onclick = ()=> downloadText('sw.js', genSW()));
+  $('#btn-dl-icons') && ($('#btn-dl-icons').onclick = downloadIcons);
+
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt = e; const b=$('#btn-install-pwa'); if(b) b.style.display='inline-flex'; });
+  $('#btn-install-pwa') && ($('#btn-install-pwa').onclick = async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; $('#btn-install-pwa').style.display='none'; });
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    fetch('sw.js', {method:'HEAD'}).then(r=>{ if(r.ok) navigator.serviceWorker.register('sw.js'); }).catch(()=>{});
+  }
+
+  // Init
+  settings = loadSettings();
+  updateAutosaveUI();
+  supaInit();
+  updateAuthUI();
+  setDateDefault();
+  renderAll();
+  // Ensure import button opens file dialog
+  document.getElementById('btn-import') && (document.getElementById('btn-import').onclick = ()=> document.getElementById('file-import').click());
+})();
+</script>
+</body>
+</html>
